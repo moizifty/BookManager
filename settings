@@ -1,5 +1,8 @@
 #The directory where the books are stored
 #use ';' to append more directories
+#avoid putting ambigous directories such as /home/username
+#or directoris with too many sub directories
+#as the program search all sub directories too
 booksDir=/home/moiz/Books;/home/moiz/Downloads
 
 #The pdf history for zathura normally stored here

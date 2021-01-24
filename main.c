@@ -46,6 +46,7 @@ void readBooksDirectory(char *booksDir);
 void freeBookList(struct Book *bookList);
 struct BookMetaDataEntry *getBookMetaData(char *path, int *numMetaData);
 int getTotalPageCount(struct Book *book);
+char *getFileType(char *path);
 extern FILE *popen (const char *__command, const char *__modes);
 
 int 
@@ -202,7 +203,7 @@ readBooksDirectory(char *booksDir)
         if( (dir = opendir(token)) == NULL)
         {
             errprintf("Could not open directory : \'%s\'\n", token);
-            exit(EXIT_FAILURE);
+            continue;
         }
         struct dirent *ent;
         while((ent = readdir(dir)) != NULL)
@@ -211,7 +212,6 @@ readBooksDirectory(char *booksDir)
             if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
                 continue;
 
-            printf("%s\n", ent->d_name);
             if(ent->d_type == 4)
             {
                 char path[PATH_MAX] = {0};
@@ -220,6 +220,13 @@ readBooksDirectory(char *booksDir)
                 strcat(path, ent->d_name);
                 readBooksDirectory(path);
             }
+            char path[PATH_MAX] = {0};
+            strcat(path, token);
+            strcat(path, "/");
+            strcat(path, ent->d_name);
+            if(strcmp(getFileType(path), "PDF"))
+                continue;
+            printf("%s\n", ent->d_name);
         }
         closedir(dir);
     }
@@ -300,4 +307,26 @@ getBookMetaData(char *path, int *numMetaData)
     *numMetaData = currNumEntries - 1;
     pclose(fp);
     return mdEntry;
+}
+
+char *
+getFileType(char *path)
+{
+    FILE *fp;
+    char command[PATH_MAX] = "file ";
+    strcat(command, "\"");
+    strcat(command, path);
+    strcat(command, "\" ");
+    strcat(command, "-b ");
+
+    if( (fp = popen(command, "r")) == NULL)
+    {
+        errprintf("Could not read book metadata: %s\n", path);
+    }
+
+    static char type[4] = {0};
+    fgets(type, sizeof(type), fp);
+
+    fclose(fp);
+    return type;
 }
