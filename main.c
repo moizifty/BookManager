@@ -29,6 +29,7 @@ struct Settings
 FILE *openSettingsFile();
 void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
+char **parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
 void readBooksDirectory(char *booksDir);
 
@@ -46,11 +47,9 @@ main(int argc, char **argv)
     struct Settings appSettings = {0};
     FILE *settFile = openSettingsFile();
     parseSettingsFile(&appSettings, settFile);
-    FILE *zathuraFP = fopen(appSettings.zathuraHist, "rb");
-
+    parseZathuraHist(appSettings.zathuraHist);
     readBooksDirectory(appSettings.booksDir);
-
-    char ch;
+    /*char ch;
     char filename[FILENAME_MAX];
     bool readBrack = false;
     for(int i = 0; (ch = getc(zathuraFP)) != EOF; )
@@ -76,9 +75,48 @@ main(int argc, char **argv)
             readBrack = true;
             continue;
         }
+    }*/
+    fclose(settFile);
+}
+
+char **
+parseZathuraHist(char *path)
+{
+    char ch;
+    char filename[FILENAME_MAX];
+    bool readBrack = false;
+    FILE *zathuraFP;
+    if((zathuraFP = fopen(path, "rb")) == NULL)
+    {
+        errprintf("Could not open zathura history file at path: %s\n", path);
+        exit(EXIT_FAILURE);
+    }
+    for(int i = 0; (ch = getc(zathuraFP)) != EOF; )
+    {
+        if(readBrack && ch == ']')
+        {
+            filename[i] = '\0';
+            /*if(!strcmp(filename, pathName))
+            {
+                printf("%s\n", filename);
+                printf("%d\n", readPageNumberZathura(zathuraFP));
+                break;
+            }*/
+            printf("%s\n", filename);
+            memset(filename, '\0', i);
+            readBrack = i = 0;
+        }
+        if(readBrack)
+        {
+            filename[i++] = ch;
+        }
+        if(ch == '[' && !readBrack)
+        {
+            readBrack = true;
+            continue;
+        }
     }
     fclose(zathuraFP);
-    fclose(settFile);
 }
 
 FILE *
