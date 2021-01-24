@@ -1,7 +1,3 @@
-//pdfinfo Books/os-dev.pdf | \grep --color=auto Pages: | awk '{print $2}'
-//above line gets number of pages
-//remove mupdf headers and use poppler
-#include <mupdf/fitz.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -46,7 +42,7 @@ void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
 struct Book *parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
-void readBooksDirectory(char *booksDir, struct Book *bookList);
+void readBooksDirectory(char *booksDir);
 void freeBookList(struct Book *bookList);
 struct BookMetaDataEntry *getBookMetaData(char *path, int *numMetaData);
 int getTotalPageCount(struct Book *book);
@@ -59,7 +55,7 @@ main(int argc, char **argv)
     FILE *settingsFile = openSettingsFile();
     parseSettingsFile(&appSettings, settingsFile);
     struct Book *zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
-    readBooksDirectory(appSettings.booksDir, zathuraBookList);
+    readBooksDirectory(appSettings.booksDir);
     
     fclose(settingsFile);
     freeBookList(zathuraBookList);
@@ -192,23 +188,25 @@ readPageNumberZathura(FILE *fp)
 }
 
 void
-readBooksDirectory(char *booksDir, struct Book *bookList)
+readBooksDirectory(char *booksDir)
 {
     DIR *dir = opendir(booksDir);
     struct dirent *ent;
     while((ent = readdir(dir)) != NULL)
     {
-        for(struct Book *bookPtr = bookList; bookPtr->path != NULL; bookPtr++)
+        // 4 = directory, 8 = file
+        if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
+            continue;
+
+        printf("%s\n", ent->d_name);
+        if(ent->d_type == 4)
         {
-            char pathName[PATH_MAX] = {0};
-            strcat(pathName, booksDir);
-            strcat(pathName, "/");
-            strcat(pathName, ent->d_name);
-            
-            if(!strcmp(pathName, bookPtr->path))
-            {
-                printf("%s || %d/%d\n", ent->d_name, bookPtr->currReadPages, getTotalPageCount(bookPtr));
-            }
+            printf("\t-- ");
+            char path[PATH_MAX] = {0};
+            strcat(path, booksDir);
+            strcat(path, "/");
+            strcat(path, ent->d_name);
+            readBooksDirectory(path);
         }
     }
     closedir(dir);

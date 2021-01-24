@@ -9,10 +9,6 @@
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
-                "-I/usr/local/include",
-                "/usr/local/lib/libmupdf.a",
-	            "/usr/local/lib/libmupdf-third.a",
-	            "-lm"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
