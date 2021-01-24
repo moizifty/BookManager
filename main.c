@@ -1,3 +1,6 @@
+//pdfinfo Books/os-dev.pdf | \grep --color=auto Pages: | awk '{print $2}'
+//above line gets number of pages
+//remove mupdf headers and use poppler
 #include <mupdf/fitz.h>
 #include <stdio.h>
 #include <stdlib.h>
