@@ -37,7 +37,7 @@ struct Settings
     char zathuraHist[FILENAME_MAX];
 };
 
-FILE *openSettingsFile();
+FILE *openSettingsFile(char *path);
 void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
 struct Book *parseZathuraHist(char *path);
@@ -52,7 +52,7 @@ int
 main(int argc, char **argv)
 {
     struct Settings appSettings = {0};
-    FILE *settingsFile = openSettingsFile();
+    FILE *settingsFile = openSettingsFile(argv[1]);
     parseSettingsFile(&appSettings, settingsFile);
     struct Book *zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
     readBooksDirectory(appSettings.booksDir);
@@ -62,10 +62,10 @@ main(int argc, char **argv)
 }
 
 FILE *
-openSettingsFile()
+openSettingsFile(char *path)
 {
     FILE *fp;
-    if((fp = fopen("settings", "ab+")) == NULL)
+    if((fp = fopen(path, "ab+")) == NULL)
     {
         errprintf("Could not open or create settings file\n");
         exit(EXIT_FAILURE);
@@ -190,26 +190,39 @@ readPageNumberZathura(FILE *fp)
 void
 readBooksDirectory(char *booksDir)
 {
-    DIR *dir = opendir(booksDir);
-    struct dirent *ent;
-    while((ent = readdir(dir)) != NULL)
+    char *token;
+    char *svePtr;
+    for(; ; booksDir = NULL)
     {
-        // 4 = directory, 8 = file
-        if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
-            continue;
+        token = __strtok_r(booksDir, ";", &svePtr);
+        if(token == NULL)
+            break;
 
-        printf("%s\n", ent->d_name);
-        if(ent->d_type == 4)
+        DIR *dir;
+        if( (dir = opendir(token)) == NULL)
         {
-            printf("\t-- ");
-            char path[PATH_MAX] = {0};
-            strcat(path, booksDir);
-            strcat(path, "/");
-            strcat(path, ent->d_name);
-            readBooksDirectory(path);
+            errprintf("Could not open directory : \'%s\'\n", token);
+            exit(EXIT_FAILURE);
         }
+        struct dirent *ent;
+        while((ent = readdir(dir)) != NULL)
+        {
+            // 4 = directory, 8 = file
+            if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
+                continue;
+
+            printf("%s\n", ent->d_name);
+            if(ent->d_type == 4)
+            {
+                char path[PATH_MAX] = {0};
+                strcat(path, token);
+                strcat(path, "/");
+                strcat(path, ent->d_name);
+                readBooksDirectory(path);
+            }
+        }
+        closedir(dir);
     }
-    closedir(dir);
 }
 
 int

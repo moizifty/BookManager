@@ -1,5 +1,6 @@
 #The directory where the books are stored
-booksDir=/home/moiz/Books
+#use ';' to append more directories
+booksDir=/home/moiz/Books;/home/moiz/Downloads
 
 #The pdf history for zathura normally stored here
 zathuraHist=/home/moiz/.local/share/zathura/history
