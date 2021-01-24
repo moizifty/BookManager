@@ -243,11 +243,12 @@ getBookMetaData(char *path, int *numMetaData)
     int totalMDEntries = 10;
     int currNumEntries = 0;
     FILE *fp;
-    char command[PATH_MAX] = {0};
-    strcat(command, "pdfinfo ");
+    char command[PATH_MAX] = "pdfinfo ";
     strcat(command, "\"");
     strcat(command, path);
-    strcat(command, "\"");
+    strcat(command, "\" ");
+    strcat(command, "2> ");
+    strcat(command, "/dev/null");
 
     if( (fp = popen(command, "r")) == NULL)
     {
