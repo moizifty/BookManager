@@ -14,7 +14,7 @@
 
 struct Book
 {
-    char path[PATH_MAX];
+    char *path;
     char name[FILENAME_MAX];
     int currReadPages;
 };
@@ -34,9 +34,11 @@ struct Settings
 FILE *openSettingsFile();
 void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
-char **parseZathuraHist(char *path);
+struct Book *parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
-void readBooksDirectory(char *booksDir, char **zb);
+void readBooksDirectory(char *booksDir, struct Book *bookList);
+void freeBookList(struct Book *bookList);
+int getTotalPageCount(char *path);
 
 int 
 main(int argc, char **argv)
@@ -44,11 +46,11 @@ main(int argc, char **argv)
     struct Settings appSettings = {0};
     FILE *settingsFile = openSettingsFile();
     parseSettingsFile(&appSettings, settingsFile);
-    char **zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
+    struct Book *zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
     readBooksDirectory(appSettings.booksDir, zathuraBookList);
-
+    
     fclose(settingsFile);
-    free(zathuraBookList);
+    freeBookList(zathuraBookList);
 }
 
 FILE *
@@ -113,14 +115,14 @@ tokeniseSettingsFile(char *str, char lSide[], char rSide[])
     rSide[i] = '\0';
 }
 
-char **
+struct Book *
 parseZathuraHist(char *path)
 {
     char ch;
     char filename[FILENAME_MAX];
     int currNumBooks = 0;
-    char **bookList;
-    if((bookList = malloc(10 * sizeof(char *))) == NULL)
+    struct Book *bookList;
+    if((bookList = malloc(10 * sizeof(struct Book))) == NULL)
     {
         errprintf("Could not allocate memory at function %s\n", __func__);
         exit(EXIT_FAILURE);
@@ -137,12 +139,13 @@ parseZathuraHist(char *path)
         if(readBrack && ch == ']')
         {
             filename[i] = '\0';
-            if((bookList[currNumBooks++] = malloc(i)) == NULL)
+            if((bookList[currNumBooks++].path = malloc(i)) == NULL)
             {
                 errprintf("Could not allocate memory at function %s\n", __func__);
                 exit(EXIT_FAILURE);
             }
-            strcpy(bookList[currNumBooks - 1], filename);
+            bookList[(currNumBooks - 1)].currReadPages = readPageNumberZathura(zathuraFP);
+            strcpy(bookList[currNumBooks - 1].path, filename);
             readBrack = i = 0;
         }
         if(readBrack)
@@ -156,7 +159,7 @@ parseZathuraHist(char *path)
         }
     }
     fclose(zathuraFP);
-    bookList[currNumBooks] = NULL;
+    bookList[currNumBooks].path = NULL;
     return bookList;
 }
 
@@ -176,24 +179,81 @@ readPageNumberZathura(FILE *fp)
 }
 
 void
-readBooksDirectory(char *booksDir, char **zb)
+readBooksDirectory(char *booksDir, struct Book *bookList)
 {
     DIR *dir = opendir(booksDir);
     struct dirent *ent;
     while((ent = readdir(dir)) != NULL)
     {
-        for(char **bookStr = zb; *bookStr != NULL; bookStr++)
+        for(struct Book *bookPtr = bookList; bookPtr->path != NULL; bookPtr++)
         {
             char pathName[PATH_MAX] = {0};
             strcat(pathName, booksDir);
             strcat(pathName, "/");
             strcat(pathName, ent->d_name);
             
-            if(!strcmp(pathName, *bookStr))
+            if(!strcmp(pathName, bookPtr->path))
             {
-                printf("%s\n", ent->d_name);
+                printf("%s || %d/%d\n", ent->d_name, bookPtr->currReadPages, getTotalPageCount(bookPtr->path));
             }
         }
     }
     closedir(dir);
+}
+
+//does not get .djvu page count
+int
+getTotalPageCount(char *path)
+{
+    fz_context *ctx;
+    fz_document *doc;
+
+    /* Create a context to hold the exception stack and various caches. */
+    ctx = fz_new_context(NULL, NULL, FZ_STORE_UNLIMITED);
+    if (!ctx)
+    {
+        fprintf(stderr, "cannot create mupdf context\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Register the default file types to handle. */
+    fz_try(ctx)
+        fz_register_document_handlers(ctx);
+    fz_catch(ctx)
+    {
+        fprintf(stderr, "cannot register document handlers: %s\n", fz_caught_message(ctx));
+        fz_drop_context(ctx);
+        return EXIT_FAILURE;
+    }
+
+    /* Open the document. */
+    fz_try(ctx)
+        doc = fz_open_document(ctx, path);
+    fz_catch(ctx)
+    {
+        fprintf(stderr, "cannot open document: %s\n", fz_caught_message(ctx));
+        fz_drop_context(ctx);
+        return EXIT_FAILURE;
+    }
+
+    fz_try(ctx)
+        return fz_count_pages(ctx, doc);
+    fz_catch(ctx)
+    {
+        fprintf(stderr, "cannot count number of pages: %s\n", fz_caught_message(ctx));
+        fz_drop_document(ctx, doc);
+        fz_drop_context(ctx);
+        return EXIT_FAILURE;
+    }
+}
+
+void
+freeBookList(struct Book *bookList)
+{
+    for(struct Book *book = bookList; book->path != NULL; book++)
+    {
+        free(book->path);
+    }
+
+    free(bookList);
 }
