@@ -42,7 +42,7 @@ void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
 struct Book *parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
-void readBooksDirectory(char *booksDir);
+void readBooksDirectory(char *booksDir, int *n);
 void freeBookList(struct Book *bookList);
 struct BookMetaDataEntry *getBookMetaData(char *path, int *numMetaData);
 int getTotalPageCount(struct Book *book);
@@ -56,7 +56,9 @@ main(int argc, char **argv)
     FILE *settingsFile = openSettingsFile(argv[1]);
     parseSettingsFile(&appSettings, settingsFile);
     struct Book *zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
-    readBooksDirectory(appSettings.booksDir);
+    int n = 0;
+    readBooksDirectory(appSettings.booksDir, &n);
+        printf("%d\n", n);
     
     fclose(settingsFile);
     freeBookList(zathuraBookList);
@@ -189,7 +191,7 @@ readPageNumberZathura(FILE *fp)
 }
 
 void
-readBooksDirectory(char *booksDir)
+readBooksDirectory(char *booksDir, int *n)
 {
     DIR *dir;
     if( (dir = opendir(booksDir)) == NULL)
@@ -211,7 +213,7 @@ readBooksDirectory(char *booksDir)
             strcat(path, booksDir);
             strcat(path, "/");
             strcat(path, ent->d_name);
-            readBooksDirectory(path);
+            readBooksDirectory(path, n);
         }
         char path[PATH_MAX] = {0};
         strcat(path, booksDir);
@@ -220,6 +222,7 @@ readBooksDirectory(char *booksDir)
         if(strcmp(getFileType(path), "PDF"))
             continue;
         printf("%s\n", ent->d_name);
+        (*n)++;
     }
     closedir(dir);
 }
