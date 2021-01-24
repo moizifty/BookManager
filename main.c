@@ -12,20 +12,27 @@
 #include <dirent.h>
 
 #define errprintf(...) fprintf(stderr, __VA_ARGS__)
-#define SETTINGS_L_SIDE_LEN 32
-#define SETTINGS_R_SIDE_LEN BUFSIZ
+#define STATMENT_L_SIDE_LEN 100
+#define STATMENT_R_SIDE_LEN BUFSIZ
+
+struct Statement
+{
+    char lSide[STATMENT_L_SIDE_LEN];
+    char rSide[STATMENT_R_SIDE_LEN];
+};
+
+struct BookMetaDataEntry
+{
+    struct Statement data;
+};
 
 struct Book
 {
     char *path;
     char name[FILENAME_MAX];
+    struct BookMetaDataEntry *metaData;
+    int numMetaData;
     int currReadPages;
-};
-
-struct SettingsStatement
-{
-    char lSide[SETTINGS_L_SIDE_LEN];
-    char rSide[SETTINGS_R_SIDE_LEN];
 };
 
 struct Settings
@@ -41,7 +48,9 @@ struct Book *parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
 void readBooksDirectory(char *booksDir, struct Book *bookList);
 void freeBookList(struct Book *bookList);
-int getTotalPageCount(char *path);
+struct BookMetaDataEntry *getBookMetaData(char *path, int *numMetaData);
+int getTotalPageCount(struct Book *book);
+extern FILE *popen (const char *__command, const char *__modes);
 
 int 
 main(int argc, char **argv)
@@ -73,7 +82,7 @@ void
 parseSettingsFile(struct Settings *settings, FILE *fp)
 {
     char line[BUFSIZ];
-    struct SettingsStatement stat;
+    struct Statement stat;
     while(fgets(line, BUFSIZ, fp) !=  NULL)
     {
         tokeniseSettingsFile(line, stat.lSide, stat.rSide);
@@ -81,12 +90,12 @@ parseSettingsFile(struct Settings *settings, FILE *fp)
         if(!strcmp(stat.lSide, "booksDir"))
         {
             strcpy(settings->booksDir, stat.rSide);
-            memset(&stat, 0, sizeof(struct SettingsStatement));
+            memset(&stat, 0, sizeof(struct Statement));
         }
         else if(!strcmp(stat.lSide, "zathuraHist"))
         {
             strcpy(settings->zathuraHist, stat.rSide);
-            memset(&stat, 0, sizeof(struct SettingsStatement));
+            memset(&stat, 0, sizeof(struct Statement));
         }
     }
 }
@@ -149,6 +158,7 @@ parseZathuraHist(char *path)
             }
             bookList[(currNumBooks - 1)].currReadPages = readPageNumberZathura(zathuraFP);
             strcpy(bookList[currNumBooks - 1].path, filename);
+            bookList[(currNumBooks - 1)] .metaData = getBookMetaData(filename, &bookList[(currNumBooks - 1)].numMetaData);
             readBrack = i = 0;
         }
         if(readBrack)
@@ -197,56 +207,22 @@ readBooksDirectory(char *booksDir, struct Book *bookList)
             
             if(!strcmp(pathName, bookPtr->path))
             {
-                printf("%s || %d/%d\n", ent->d_name, bookPtr->currReadPages, getTotalPageCount(bookPtr->path));
+                printf("%s || %d/%d\n", ent->d_name, bookPtr->currReadPages, getTotalPageCount(bookPtr));
             }
         }
     }
     closedir(dir);
 }
 
-//does not get .djvu page count
 int
-getTotalPageCount(char *path)
+getTotalPageCount(struct Book *book)
 {
-    fz_context *ctx;
-    fz_document *doc;
-
-    /* Create a context to hold the exception stack and various caches. */
-    ctx = fz_new_context(NULL, NULL, FZ_STORE_UNLIMITED);
-    if (!ctx)
+    for(int i = 0; i < book->numMetaData; i++)
     {
-        fprintf(stderr, "cannot create mupdf context\n");
-        return EXIT_FAILURE;
-    }
-
-    /* Register the default file types to handle. */
-    fz_try(ctx)
-        fz_register_document_handlers(ctx);
-    fz_catch(ctx)
-    {
-        fprintf(stderr, "cannot register document handlers: %s\n", fz_caught_message(ctx));
-        fz_drop_context(ctx);
-        return EXIT_FAILURE;
-    }
-
-    /* Open the document. */
-    fz_try(ctx)
-        doc = fz_open_document(ctx, path);
-    fz_catch(ctx)
-    {
-        fprintf(stderr, "cannot open document: %s\n", fz_caught_message(ctx));
-        fz_drop_context(ctx);
-        return EXIT_FAILURE;
-    }
-
-    fz_try(ctx)
-        return fz_count_pages(ctx, doc);
-    fz_catch(ctx)
-    {
-        fprintf(stderr, "cannot count number of pages: %s\n", fz_caught_message(ctx));
-        fz_drop_document(ctx, doc);
-        fz_drop_context(ctx);
-        return EXIT_FAILURE;
+        if(!strcmp(book->metaData[i].data.lSide, "Pages"))
+        {
+            return atoi(book->metaData[i].data.rSide);
+        }
     }
 }
 
@@ -256,7 +232,60 @@ freeBookList(struct Book *bookList)
     for(struct Book *book = bookList; book->path != NULL; book++)
     {
         free(book->path);
+        free(book->metaData);
+    }
+    free(bookList);
+}
+
+struct BookMetaDataEntry *
+getBookMetaData(char *path, int *numMetaData)
+{
+    int ch = 0;
+    int i = 0;
+    int totalMDEntries = 10;
+    int currNumEntries = 0;
+    FILE *fp;
+    char command[PATH_MAX] = {0};
+    strcat(command, "pdfinfo ");
+    strcat(command, "\"");
+    strcat(command, path);
+    strcat(command, "\"");
+
+    if( (fp = popen(command, "r")) == NULL)
+    {
+        errprintf("Could not read book metadata: %s\n", path);
     }
 
-    free(bookList);
+    bool seenColon = false;
+    struct BookMetaDataEntry *mdEntry = malloc(totalMDEntries * sizeof(struct BookMetaDataEntry));
+    while((ch = getc(fp)) != EOF)
+    {
+        if(ch == '\n')
+        {
+            mdEntry[currNumEntries++].data.rSide[i] = '\0';
+            if(currNumEntries >= totalMDEntries)
+            {
+                mdEntry = realloc(mdEntry, (currNumEntries + 5) * sizeof(struct BookMetaDataEntry));
+                totalMDEntries += 5;
+            }
+            seenColon = i = 0;
+        }
+        if(isblank(ch) || isspace(ch))
+            continue;
+        if(ch == ':' && !seenColon)
+        {
+            mdEntry[currNumEntries].data.lSide[i] = '\0';
+            seenColon = true;
+            i = 0;
+            continue;
+        }
+
+        if(!seenColon)
+            mdEntry[currNumEntries].data.lSide[i++] = ch;
+        else
+            mdEntry[currNumEntries].data.rSide[i++] = ch;
+    }
+    *numMetaData = currNumEntries - 1;
+    pclose(fp);
+    return mdEntry;
 }
