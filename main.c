@@ -191,45 +191,37 @@ readPageNumberZathura(FILE *fp)
 void
 readBooksDirectory(char *booksDir)
 {
-    char *token;
-    char *svePtr;
-    for(; ; booksDir = NULL)
+    DIR *dir;
+    if( (dir = opendir(booksDir)) == NULL)
     {
-        token = __strtok_r(booksDir, ";", &svePtr);
-        if(token == NULL)
-            break;
-
-        DIR *dir;
-        if( (dir = opendir(token)) == NULL)
-        {
-            errprintf("Could not open directory : \'%s\'\n", token);
+        errprintf("Could not open directory : \'%s\'\n", booksDir);
+        //dont exit program, as im scanning sub directories too via recursion
+        return;
+    }
+    struct dirent *ent;
+    while((ent = readdir(dir)) != NULL)
+    {
+        // 4 = directory, 8 = file
+        if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
             continue;
-        }
-        struct dirent *ent;
-        while((ent = readdir(dir)) != NULL)
-        {
-            // 4 = directory, 8 = file
-            if((!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) && ent->d_type == 4)
-                continue;
 
-            if(ent->d_type == 4)
-            {
-                char path[PATH_MAX] = {0};
-                strcat(path, token);
-                strcat(path, "/");
-                strcat(path, ent->d_name);
-                readBooksDirectory(path);
-            }
+        if(ent->d_type == 4)
+        {
             char path[PATH_MAX] = {0};
-            strcat(path, token);
+            strcat(path, booksDir);
             strcat(path, "/");
             strcat(path, ent->d_name);
-            if(strcmp(getFileType(path), "PDF"))
-                continue;
-            printf("%s\n", ent->d_name);
+            readBooksDirectory(path);
         }
-        closedir(dir);
+        char path[PATH_MAX] = {0};
+        strcat(path, booksDir);
+        strcat(path, "/");
+        strcat(path, ent->d_name);
+        if(strcmp(getFileType(path), "PDF"))
+            continue;
+        printf("%s\n", ent->d_name);
     }
+    closedir(dir);
 }
 
 int
