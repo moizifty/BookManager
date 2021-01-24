@@ -77,7 +77,6 @@ main(int argc, char **argv)
             continue;
         }
     }
-
     fclose(zathuraFP);
     fclose(settFile);
 }
