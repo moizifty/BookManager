@@ -5,14 +5,19 @@
 #include <ctype.h>
 #include <string.h>
 #include <linux/limits.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <dirent.h>
-#include <pwd.h>
 
 #define errprintf(...) fprintf(stderr, __VA_ARGS__)
 #define SETTINGS_L_SIDE_LEN 32
 #define SETTINGS_R_SIDE_LEN BUFSIZ
+
+struct Book
+{
+    char path[PATH_MAX];
+    char name[FILENAME_MAX];
+    int currReadPages;
+};
 
 struct SettingsStatement
 {
@@ -31,92 +36,19 @@ void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
 char **parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
-void readBooksDirectory(char *booksDir);
+void readBooksDirectory(char *booksDir, char **zb);
 
 int 
 main(int argc, char **argv)
 {
-    /* get usename
-    uid_t uid = geteuid();
-    struct passwd *pw = getpwuid(uid);
-    */
-    
-    char pathName[PATH_MAX];
-    fz_realpath(argv[1], pathName);
-
     struct Settings appSettings = {0};
-    FILE *settFile = openSettingsFile();
-    parseSettingsFile(&appSettings, settFile);
-    parseZathuraHist(appSettings.zathuraHist);
-    readBooksDirectory(appSettings.booksDir);
-    /*char ch;
-    char filename[FILENAME_MAX];
-    bool readBrack = false;
-    for(int i = 0; (ch = getc(zathuraFP)) != EOF; )
-    {
-        if(readBrack && ch == ']')
-        {
-            filename[i] = '\0';
-            if(!strcmp(filename, pathName))
-            {
-                printf("%s\n", filename);
-                printf("%d\n", readPageNumberZathura(zathuraFP));
-                break;
-            }
-            memset(filename, '\0', i);
-            readBrack = i = 0;
-        }
-        if(readBrack)
-        {
-            filename[i++] = ch;
-        }
-        if(ch == '[' && !readBrack)
-        {
-            readBrack = true;
-            continue;
-        }
-    }*/
-    fclose(settFile);
-}
+    FILE *settingsFile = openSettingsFile();
+    parseSettingsFile(&appSettings, settingsFile);
+    char **zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
+    readBooksDirectory(appSettings.booksDir, zathuraBookList);
 
-char **
-parseZathuraHist(char *path)
-{
-    char ch;
-    char filename[FILENAME_MAX];
-    bool readBrack = false;
-    FILE *zathuraFP;
-    if((zathuraFP = fopen(path, "rb")) == NULL)
-    {
-        errprintf("Could not open zathura history file at path: %s\n", path);
-        exit(EXIT_FAILURE);
-    }
-    for(int i = 0; (ch = getc(zathuraFP)) != EOF; )
-    {
-        if(readBrack && ch == ']')
-        {
-            filename[i] = '\0';
-            /*if(!strcmp(filename, pathName))
-            {
-                printf("%s\n", filename);
-                printf("%d\n", readPageNumberZathura(zathuraFP));
-                break;
-            }*/
-            printf("%s\n", filename);
-            memset(filename, '\0', i);
-            readBrack = i = 0;
-        }
-        if(readBrack)
-        {
-            filename[i++] = ch;
-        }
-        if(ch == '[' && !readBrack)
-        {
-            readBrack = true;
-            continue;
-        }
-    }
-    fclose(zathuraFP);
+    fclose(settingsFile);
+    free(zathuraBookList);
 }
 
 FILE *
@@ -181,16 +113,51 @@ tokeniseSettingsFile(char *str, char lSide[], char rSide[])
     rSide[i] = '\0';
 }
 
-void
-readBooksDirectory(char *booksDir)
+char **
+parseZathuraHist(char *path)
 {
-    DIR *dir = opendir(booksDir);
-    struct dirent *ent;
-    while((ent = readdir(dir)) != NULL)
+    char ch;
+    char filename[FILENAME_MAX];
+    int currNumBooks = 0;
+    char **bookList;
+    if((bookList = malloc(10 * sizeof(char *))) == NULL)
     {
-        printf("%s\n", ent->d_name);
+        errprintf("Could not allocate memory at function %s\n", __func__);
+        exit(EXIT_FAILURE);
     }
-    closedir(dir);
+    bool readBrack = false;
+    FILE *zathuraFP;
+    if((zathuraFP = fopen(path, "rb")) == NULL)
+    {
+        errprintf("Could not open zathura history file at path: %s\n", path);
+        exit(EXIT_FAILURE);
+    }
+    for(int i = 0; (ch = getc(zathuraFP)) != EOF; )
+    {
+        if(readBrack && ch == ']')
+        {
+            filename[i] = '\0';
+            if((bookList[currNumBooks++] = malloc(i)) == NULL)
+            {
+                errprintf("Could not allocate memory at function %s\n", __func__);
+                exit(EXIT_FAILURE);
+            }
+            strcpy(bookList[currNumBooks - 1], filename);
+            readBrack = i = 0;
+        }
+        if(readBrack)
+        {
+            filename[i++] = ch;
+        }
+        if(ch == '[' && !readBrack)
+        {
+            readBrack = true;
+            continue;
+        }
+    }
+    fclose(zathuraFP);
+    bookList[currNumBooks] = NULL;
+    return bookList;
 }
 
 int 
@@ -206,4 +173,27 @@ readPageNumberZathura(FILE *fp)
     }
 
     return atoi(pgeNum);
+}
+
+void
+readBooksDirectory(char *booksDir, char **zb)
+{
+    DIR *dir = opendir(booksDir);
+    struct dirent *ent;
+    while((ent = readdir(dir)) != NULL)
+    {
+        for(char **bookStr = zb; *bookStr != NULL; bookStr++)
+        {
+            char pathName[PATH_MAX] = {0};
+            strcat(pathName, booksDir);
+            strcat(pathName, "/");
+            strcat(pathName, ent->d_name);
+            
+            if(!strcmp(pathName, *bookStr))
+            {
+                printf("%s\n", ent->d_name);
+            }
+        }
+    }
+    closedir(dir);
 }
