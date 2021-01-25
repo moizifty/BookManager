@@ -1,6 +1,5 @@
 #The directory where the books are stored
-booksDir=/home/moiz/OneDrive/Books
+booksDir=/home/moiz/Books
 
 #The pdf history for zathura normally stored here
 zathuraHist=/home/moiz/.local/share/zathura/history
-

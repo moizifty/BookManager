@@ -37,6 +37,7 @@ struct Settings
     char zathuraHist[FILENAME_MAX];
 };
 
+void newBookFromPath(char *path, struct Book *book);
 FILE *openSettingsFile(char *path);
 void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
@@ -62,6 +63,26 @@ main(int argc, char **argv)
     
     fclose(settingsFile);
     freeBookList(zathuraBookList);
+}
+
+void
+newBookFromPath(char *path, struct Book *book)
+{
+    if(strcmp(getFileType(path), "PDF"))
+        return;
+    
+    int i = strlen(path) - 1;
+    for(; i >= 0 && path[i] != '/'; i--)
+    {;}
+
+    if( (book->path = malloc(strlen(path))) == NULL)
+    {
+        errprintf("Could not allocate memory for book path\n");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(book->path, path);
+    strcpy(book->name, path + i);
+    book->metaData = getBookMetaData(path, &book->numMetaData);
 }
 
 FILE *
@@ -131,9 +152,10 @@ parseZathuraHist(char *path)
 {
     char ch;
     char filename[FILENAME_MAX];
+    int totalNumBooks = 5;
     int currNumBooks = 0;
     struct Book *bookList;
-    if((bookList = malloc(10 * sizeof(struct Book))) == NULL)
+    if((bookList = malloc(totalNumBooks * sizeof(struct Book))) == NULL)
     {
         errprintf("Could not allocate memory at function %s\n", __func__);
         exit(EXIT_FAILURE);
@@ -150,14 +172,16 @@ parseZathuraHist(char *path)
         if(readBrack && ch == ']')
         {
             filename[i] = '\0';
-            if((bookList[currNumBooks++].path = malloc(i)) == NULL)
+            if(!strcmp(getFileType(filename), "PDF"))
             {
-                errprintf("Could not allocate memory at function %s\n", __func__);
-                exit(EXIT_FAILURE);
+                newBookFromPath(filename, &bookList[currNumBooks]);
+                bookList[currNumBooks++].currReadPages = readPageNumberZathura(zathuraFP);
+                if(currNumBooks >= totalNumBooks)
+                {
+                    totalNumBooks += 5;
+                    bookList = realloc(bookList, (totalNumBooks) * sizeof(struct Book));
+                }
             }
-            bookList[(currNumBooks - 1)].currReadPages = readPageNumberZathura(zathuraFP);
-            strcpy(bookList[currNumBooks - 1].path, filename);
-            bookList[(currNumBooks - 1)] .metaData = getBookMetaData(filename, &bookList[(currNumBooks - 1)].numMetaData);
             readBrack = i = 0;
         }
         if(readBrack)
