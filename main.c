@@ -43,7 +43,7 @@ void tokeniseSettingsFile(char *str, char lSide[], char rSide[]);
 void parseSettingsFile(struct Settings *settings, FILE *fp);
 struct Book *parseZathuraHist(char *path);
 int readPageNumberZathura(FILE *fp);
-void readBooksDirectory(char *booksDir, int *n);
+void readBooksDirectory(char *booksDir, struct Book **list, int *numAlloc, int *n);
 void freeBookList(struct Book *bookList);
 struct BookMetaDataEntry *getBookMetaData(char *path, int *numMetaData);
 int getTotalPageCount(struct Book *book);
@@ -57,12 +57,23 @@ main(int argc, char **argv)
     FILE *settingsFile = openSettingsFile(argv[1]);
     parseSettingsFile(&appSettings, settingsFile);
     struct Book *zathuraBookList = parseZathuraHist(appSettings.zathuraHist);
+    int totalAlloc = 10;
     int n = 0;
-    readBooksDirectory(appSettings.booksDir, &n);
-        printf("%d\n", n);
+    struct Book *directoryBooks = malloc(totalAlloc * sizeof(struct Book));
+    readBooksDirectory(appSettings.booksDir, &directoryBooks, &totalAlloc, &n);
+    for(int i = 0; i < n; i++)
+    {
+        printf("[%.30s]\nname: %.30s...\n", directoryBooks[i].path, directoryBooks[i].name);
+        for(int j = 0; j < directoryBooks[i].numMetaData; j++)
+        {
+            printf("%s: %s\n", directoryBooks[i].metaData[j].data.lSide, directoryBooks[i].metaData[j].data.rSide);
+        }
+        putchar('\n');
+    }
     
     fclose(settingsFile);
     freeBookList(zathuraBookList);
+    freeBookList(directoryBooks);
 }
 
 void
@@ -75,13 +86,13 @@ newBookFromPath(char *path, struct Book *book)
     for(; i >= 0 && path[i] != '/'; i--)
     {;}
 
-    if( (book->path = malloc(strlen(path))) == NULL)
+    if( (book->path = malloc(strlen(path) + 1)) == NULL)
     {
         errprintf("Could not allocate memory for book path\n");
         exit(EXIT_FAILURE);
     }
     strcpy(book->path, path);
-    strcpy(book->name, path + i);
+    strcpy(book->name, path + i + 1);
     book->metaData = getBookMetaData(path, &book->numMetaData);
 }
 
@@ -215,7 +226,7 @@ readPageNumberZathura(FILE *fp)
 }
 
 void
-readBooksDirectory(char *booksDir, int *n)
+readBooksDirectory(char *booksDir, struct Book **list, int *numAlloc, int *n)
 {
     DIR *dir;
     if( (dir = opendir(booksDir)) == NULL)
@@ -237,7 +248,7 @@ readBooksDirectory(char *booksDir, int *n)
             strcat(path, booksDir);
             strcat(path, "/");
             strcat(path, ent->d_name);
-            readBooksDirectory(path, n);
+            readBooksDirectory(path, list, numAlloc, n);
         }
         char path[PATH_MAX] = {0};
         strcat(path, booksDir);
@@ -245,8 +256,13 @@ readBooksDirectory(char *booksDir, int *n)
         strcat(path, ent->d_name);
         if(strcmp(getFileType(path), "PDF"))
             continue;
-        printf("%s\n", ent->d_name);
+        newBookFromPath(path, (&(*list)[*n]));
         (*n)++;
+        if((*n) >= (*numAlloc))
+        {
+            *numAlloc += 10;
+            *list = realloc(*list, *numAlloc * sizeof(struct Book));
+        }
     }
     closedir(dir);
 }
