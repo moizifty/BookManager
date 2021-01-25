@@ -1,0 +1,4 @@
+TODO: Neaten code
+TODO: maybe research filesystem scanning algorithm to improve speed as it takes around 8 seoncds to parse and scan 333 pdf files which isnt amazing
+TODO: make seperate header called "pdfutils.h" with everything ive done so far to match "pdfutils.c"
+end
