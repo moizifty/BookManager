@@ -64,10 +64,7 @@ main(int argc, char **argv)
     for(int i = 0; i < n; i++)
     {
         printf("[%.30s]\nname: %.30s...\n", directoryBooks[i].path, directoryBooks[i].name);
-        for(int j = 0; j < directoryBooks[i].numMetaData; j++)
-        {
-            printf("%s: %s\n", directoryBooks[i].metaData[j].data.lSide, directoryBooks[i].metaData[j].data.rSide);
-        }
+        
         putchar('\n');
     }
     
@@ -79,7 +76,7 @@ main(int argc, char **argv)
 void
 newBookFromPath(char *path, struct Book *book)
 {
-    if(strcmp(getFileType(path), "PDF"))
+    if(strcmp(getFileType(path), "pdf"))
         return;
     
     int i = strlen(path) - 1;
@@ -183,7 +180,7 @@ parseZathuraHist(char *path)
         if(readBrack && ch == ']')
         {
             filename[i] = '\0';
-            if(!strcmp(getFileType(filename), "PDF"))
+            if(!strcmp(getFileType(filename), "pdf"))
             {
                 newBookFromPath(filename, &bookList[currNumBooks]);
                 bookList[currNumBooks++].currReadPages = readPageNumberZathura(zathuraFP);
@@ -254,7 +251,7 @@ readBooksDirectory(char *booksDir, struct Book **list, int *numAlloc, int *n)
         strcat(path, booksDir);
         strcat(path, "/");
         strcat(path, ent->d_name);
-        if(strcmp(getFileType(path), "PDF"))
+        if(strcmp(getFileType(path), "pdf"))
             continue;
         newBookFromPath(path, (&(*list)[*n]));
         (*n)++;
@@ -344,24 +341,12 @@ getBookMetaData(char *path, int *numMetaData)
     return mdEntry;
 }
 
-char *
+inline char *
 getFileType(char *path)
 {
-    FILE *fp;
-    char command[PATH_MAX] = "file ";
-    strcat(command, "\"");
-    strcat(command, path);
-    strcat(command, "\" ");
-    strcat(command, "-b ");
+    int len = strlen(path);
+    if(len <= 4)
+        return NULL;
 
-    if( (fp = popen(command, "r")) == NULL)
-    {
-        errprintf("Could not read book metadata: %s\n", path);
-    }
-
-    static char type[4] = {0};
-    fgets(type, sizeof(type), fp);
-
-    fclose(fp);
-    return type;
+    return path + (len - 3);
 }
